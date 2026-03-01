@@ -1,0 +1,12 @@
+# 로그, 캐시, 체크포인트 관련 디렉토리 무시
+wandb/
+__pycache__/
+slurm_log/
+models/
+experiment/
+evaluate/
+# 기타 자주 무시하는 항목들
+*.log
+*.ckpt
+*.pth
+.DS_Store
