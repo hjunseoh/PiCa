@@ -4,7 +4,7 @@
 
 [Optimized version coming soon]
 
-This is the repository for **PiCa (Parameter-efficient Fine-tuning with Column Space Projection)**. For more details, please refer to our paper: [https://arxiv.org/abs/2505.20211](https://arxiv.org/abs/2505.20211).
+This is the repository for **PiCa (Parameter-Efficient Fine-tuning with Column Space Projection)**. For more details, please refer to our paper: [https://arxiv.org/abs/2505.20211](https://arxiv.org/abs/2505.20211).
 
 ### Installing Required Packages
 
