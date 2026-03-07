@@ -39,18 +39,6 @@ As a result, **PiCa significantly outperforms LoRA, DoRA, and other PEFT baselin
 
 ---
 
-# Results
-
-<p align="center">
-  <img src="assets/math_reasoning.jpg" width="70%" alt="Mathematical Reasoning Results"/>
-</p>
-
-<p align="center">
-<b>Figure 2.</b> PiCa outperforms competing PEFT methods on mathematical reasoning benchmarks (GSM8K, MATH).
-</p>
-
----
-
 # Method
 
 Given a frozen pre-trained weight matrix **W₀** ∈ ℝ<sup>d_in×d_out</sup> and an input **X**, PiCa computes:
