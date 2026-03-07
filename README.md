@@ -7,10 +7,6 @@
   <img src="https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?style=flat-square&logo=pytorch" />
 </p>
 
-<p align="center">
-Parameter-efficient fine-tuning via <b>column space gradient projection</b> and <b>shared adapters</b>.
-</p>
-
 **Official implementation of [PiCa: Parameter-Efficient Fine-Tuning with Column Space Projection](https://arxiv.org/abs/2505.20211) (ICLR 2026).**
 
 ---
