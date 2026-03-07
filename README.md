@@ -40,7 +40,7 @@ This design means the effective number of trainable parameters is `r × d_out` p
 **Key advantages over LoRA (assuming L layers):**
 | Feature | LoRA | PiCa |
 |---|---|---|
-| Trainable params | L × (d_in × r + r × d_out) | L × (r × d_out) (shared M) |
+| Trainable params | L × (d_in × r + r × d_out) | L × (r × d_out)  |
 | Grounded projection | ❌ random init | ✅ principal column space |
 | Weight sharing | ❌ | ✅ across same-type layers |
 | Memory footprint per layer | d_in × r + r × d_out | r × d_out only |
