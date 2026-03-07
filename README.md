@@ -13,16 +13,20 @@
 
 **PiCa (Parameter-Efficient Fine-tuning with Column Space Projection)** is a novel, theoretically grounded PEFT method that leverages the intrinsic geometry of pre-trained weights for effective and extremely parameter-efficient adaptation.
 
-Our theoretical analysis demonstrates that projecting gradients onto the **principal column space** spanned by pre-trained weights leads to effective adaptation. This gradient projection is paired with a novel **weight-sharing mechanism** for further parameter efficiency. The result is a method that achieves significantly better performance than LoRA, DoRA, and other baselines — even using *fewer* trainable parameters than rank-1 configurations.
+Our theoretical analysis demonstrates that projecting gradients onto the **principal column space** spanned by pre-trained weights leads to effective adaptation. This gradient projection is paired with a novel **weight-sharing mechanism** for further parameter efficiency.
 
-<p align="center">
-  <img src="assets/parameter efficiency.jpg" width="48%" alt="Parameter Efficiency Comparison" />
-</p>
+As a result, **PiCa achieves significantly better performance than LoRA, DoRA, and other PEFT baselines — even with fewer trainable parameters than rank-1 configurations.**
 
-<p align="center">
-  <em>PiCa achieves higher accuracy with fewer parameters than all baselines.</em>
-</p>
+<br>
 
+<div align="center">
+
+<img src="assets/parameter efficiency.jpg" width="70%" alt="Parameter Efficiency Comparison"/>
+
+**Figure 1. Parameter efficiency comparison.**  
+PiCa achieves higher accuracy while using fewer trainable parameters than existing PEFT methods.
+
+</div>
 ## Method
 
 Given a frozen pre-trained weight matrix **W₀** ∈ ℝ<sup>d_in×d_out</sup> and an input **X**, PiCa computes:
