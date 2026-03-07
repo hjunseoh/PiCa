@@ -12,8 +12,7 @@ from typing import List, Optional, Union
 from tqdm import tqdm
 import sys
 from functools import partial, reduce
-sys.path.append("../")
-from pica.pica_layer import LinearWithPiCa, create_and_replace_modules, get_target_modules_list, replace_pica_with_fused_linear
+from pica import get_pica_model
 
 sys.path.append(os.path.join(os.getcwd(), "peft/src/"))
 
@@ -244,51 +243,7 @@ def train(
         config = VeraConfig(r=lora_r, target_modules=lora_target_modules)
 
     if adapter_name == 'pica':
-        for param in model.parameters():
-            param.requires_grad = False
-
-        print(f"Target Modules: {lora_target_modules}")
-        
-        lora_module = lora_target_modules
-
-        # Step 1: prepare shared M matrices
-        shared_matrices = {}
-
-        # Define the group keywords
-        group_keywords = lora_module
-
-        # Find first matching Linear layer for each group to determine shapes
-        for name, module in model.named_modules():
-            if isinstance(module, torch.nn.Linear):
-                for group in group_keywords:
-                    if group in name:
-                        if group not in shared_matrices:
-                            out_dim = module.out_features
-                            shared_matrices[group] = torch.nn.Parameter(
-                                torch.zeros(out_dim, lora_r), requires_grad=True
-                            )
-
-        # Step 2: define assign function with shared_matrices injected
-        def assign_pica_layer_with_shared_m(linear_module, name=None):
-            shared_m = None
-            for group in group_keywords:
-                if group in name:
-                    shared_m = shared_matrices[group]
-                    break
-            return LinearWithPiCa(
-                linear=linear_module,
-                lora_rank=lora_r,
-                shared_m=shared_m,
-            )
-
-        # Step 3: replace modules
-        target_modules_list = get_target_modules_list(model, lora_module)
-        create_and_replace_modules(model, target_modules_list, assign_pica_layer_with_shared_m)
-
-        # Step 4: Add shared_matrices to model parameters (important!)
-        for group, m in shared_matrices.items():
-            group_name = group.replace(".", "_")  # <-- FIX: no dots in names
-            model.register_parameter(f"shared_m_{group_name}", m)
+        model = get_pica_model(model, lora_target_modules, lora_r)
 
     elif adapter_name == "full_ft":
         pass
@@ -371,22 +326,23 @@ def train(
 
     model.generation_config.temperature = 1.0
     model.generation_config.top_p = 1.0
-    
+
     if adapter_name == 'pica':
-        replace_pica_with_fused_linear(model, get_target_modules_list(model, lora_target_modules))
-    elif adapter_name=="full_ft":
-        pass
+        # Save only the adapter weights (shared_m + config). The base model
+        # weights are NOT duplicated — load with load_pica_model() at inference.
+        model.save_adapter(output_dir)
+        tokenizer.save_pretrained(output_dir)
+    elif adapter_name == "full_ft":
+        for param in model.parameters():
+            param.data = param.data.contiguous()
+        model.save_pretrained(output_dir, safe_serialization=False)
+        tokenizer.save_pretrained(output_dir)
     else:
         model = model.merge_and_unload()
-
-    for param in model.parameters():
-        param.data = param.data.contiguous()
-    model.save_pretrained(output_dir,safe_serialization=False)
-    tokenizer.save_pretrained(output_dir)
-
-    print(
-        "\n If there's a warning about missing keys above, please disregard :)"
-    )
+        for param in model.parameters():
+            param.data = param.data.contiguous()
+        model.save_pretrained(output_dir, safe_serialization=False)
+        tokenizer.save_pretrained(output_dir)
 
 
 def generate_prompt(data_point):

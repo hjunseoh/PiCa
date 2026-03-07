@@ -10,3 +10,4 @@ evaluate/
 *.ckpt
 *.pth
 .DS_Store
+tests/

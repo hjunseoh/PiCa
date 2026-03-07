@@ -88,8 +88,42 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
 
     stop_tokens = ["Question:", "Question", "USER:", "USER", "ASSISTANT:", "ASSISTANT", "Instruction:", "Instruction", "Response:", "Response"]
     sampling_params = SamplingParams(temperature=0.0, top_p=1, max_tokens=512, stop=stop_tokens)
+    import os
+    import tempfile
+    from transformers import AutoModelForCausalLM
+
+    temp_dir = None
+    model_path = model
+    
+    # Check if this is a PiCa adapter directory
+    if os.path.exists(os.path.join(model, "pica_adapter.bin")):
+        print(f"Detected PiCa adapter at {model}. Merging with base model for vLLM...")
+        from pica import load_pica_model, PiCaConfig
+        config = PiCaConfig.load(model)
+        base_model_path = config.base_model_name_or_path
+        if not base_model_path:
+            raise ValueError("base_model_name_or_path not found in pica_config.json")
+            
+        print(f"Loading base model: {base_model_path}")
+        base_model = AutoModelForCausalLM.from_pretrained(
+            base_model_path, torch_dtype="auto", device_map="cpu"
+        )
+        print("Applying adapter and merging...")
+        pica_model = load_pica_model(base_model, model)
+        merged_model = pica_model.merge_and_unload()
+        
+        temp_dir_obj = tempfile.TemporaryDirectory()
+        temp_dir = temp_dir_obj.name
+        print(f"Saving fused model to temporary directory: {temp_dir}")
+        merged_model.save_pretrained(temp_dir)
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(base_model_path)
+        tokenizer.save_pretrained(temp_dir)
+        
+        model_path = temp_dir
+
     print('sampleing =====', sampling_params)
-    llm = LLM(model=model,tensor_parallel_size=tensor_parallel_size)
+    llm = LLM(model=model_path, tensor_parallel_size=tensor_parallel_size)
     result = []
     res_completions = []
     for idx, (prompt, prompt_answer) in enumerate(zip(batch_gsm8k_ins, gsm8k_answers)):
@@ -116,11 +150,8 @@ def gsm8k_test(model, data_path, start=0, end=MAX_INT, batch_size=1, tensor_para
             invalid_outputs.append(temp)
     acc = sum(result) / len(result)
     print('len invalid outputs ====', len(invalid_outputs), ', valid_outputs===', invalid_outputs)
-    print('start===', start, ', end====', end)
-    print('gsm8k length====', len(result), ', gsm8k acc====', acc)
-
-
-def parse_args():
+    if 'temp_dir_obj' in locals():
+        temp_dir_obj.cleanup()
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)  # model path
     parser.add_argument("--data_file", type=str, default='')  # data path

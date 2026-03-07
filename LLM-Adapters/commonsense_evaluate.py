@@ -163,7 +163,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', choices=["boolq", "piqa", "social_i_qa", "hellaswag", "winogrande", "ARC-Challenge", "ARC-Easy", "openbookqa"], required=True)
     parser.add_argument('--model', choices=['google/gemma-2b', 'LLaMA-7B', "LLaMA-13B", 'LLaMA2-7B', 'LLaMA3-8B', 'LLaMA3.2-1B', 'LLaMA3.2-3B', 'Gemma-2B','Gemma-7B'], required=True)
-    parser.add_argument('--adapter', choices=['LoRA', 'AdapterP', 'AdapterH', 'Parallel', 'DoRA', 'None'], required=True)
+    parser.add_argument('--adapter', choices=['LoRA', 'AdapterP', 'AdapterH', 'Parallel', 'DoRA', 'None', 'pica'], required=True)
     parser.add_argument('--base_model', required=True)
     parser.add_argument('--lora_weights', required=True)
     parser.add_argument('--batch_size', type=int, required=True)
@@ -178,12 +178,10 @@ def load_model(args) -> tuple:
     lora_weights = args.lora_weights
     load_8bit = args.load_8bit
 
-    # Tokenizer 로드
     tokenizer = AutoTokenizer.from_pretrained(base_model)
     tokenizer.padding_side = "left"
-    tokenizer.pad_token_id = 0  # unk token 설정
+    tokenizer.pad_token_id = 0  
 
-    # Base model 로드
     print(f"Loading base model from: {base_model}")
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
@@ -192,23 +190,28 @@ def load_model(args) -> tuple:
         device_map="auto",
         trust_remote_code=True,
     )
-    # LoRA 가중치 로드
-    if lora_weights and lora_weights != "None":
-        print(f"Loading LoRA weights from: {lora_weights}")
-        model = PeftModel.from_pretrained(
-            model,
-            lora_weights,
-            torch_dtype=torch.float16,
-            device_map={"": 0}
-        )
 
-    # 모델 설정 조정
+    if lora_weights and lora_weights != "None":
+        if args.adapter.lower() == 'pica':
+            from pica import load_pica_model
+            print(f"Loading PiCa adapter from: {lora_weights}")
+            model = load_pica_model(model, lora_weights)
+            model = model.merge_and_unload()
+        else:
+            print(f"Loading LoRA weights from: {lora_weights}")
+            model = PeftModel.from_pretrained(
+                model,
+                lora_weights,
+                torch_dtype=torch.float16,
+                device_map={"": 0}
+            )
+
     model.config.pad_token_id = tokenizer.pad_token_id = 0  # unk
     model.config.bos_token_id = 1
     model.config.eos_token_id = 2
 
     if not load_8bit:
-        model.half()  # 메모리 최적화
+        model.half()  
 
     model.eval()
     if torch.__version__ >= "2" and sys.platform != "win32":

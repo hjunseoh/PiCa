@@ -33,9 +33,7 @@ from peft import get_peft_model, LoraConfig, VeraConfig, BOFTConfig
 from tqdm import tqdm
 from functools import partial, reduce
 
-import sys
-sys.path.append("../")
-from pica.pica_layer import LinearWithPiCa, create_and_replace_modules, get_target_modules_list, replace_pica_with_fused_linear
+from pica import get_pica_model, load_pica_model
 
 
 def _make_r_io_base(f, mode: str):
@@ -363,56 +361,8 @@ def train():
     if pica_args.adapter_name != 'pica':
         model = get_peft_model(model, config)
 
-    else:
-        for param in model.parameters():
-            param.requires_grad = False
-
-        print(f"Target Modules: {pica_args.target_modules}")
-        
-        lora_module = pica_args.target_modules
-
-        # Step 1: prepare shared M matrices
-        shared_matrices = {}
-
-        # Define the group keywords
-        group_keywords = [
-            'q_proj', 'k_proj', 'v_proj',
-            'up_proj', 'down_proj' 
-        ]
-        
-        # Find first matching Linear layer for each group to determine shapes
-        for name, module in model.named_modules():
-            if isinstance(module, torch.nn.Linear):
-                for group in group_keywords:
-                    if group in name:
-                        if group not in shared_matrices:
-                            lora_r = pica_args.rank
-                            out_dim = module.out_features
-                            shared_matrices[group] = torch.nn.Parameter(
-                                torch.zeros(out_dim, lora_r), requires_grad=True
-                            )
-    
-        # Step 2: define assign function with shared_matrices injected
-        def assign_pica_layer_with_shared_m(linear_module, name=None) :
-            shared_m = None
-            for group in group_keywords:
-                if group in name:
-                    shared_m = shared_matrices[group]
-                    break
-            return LinearWithPiCa(
-                linear=linear_module,
-                lora_rank=pica_args.rank,
-                shared_m=shared_m,
-            )
-
-        # Step 3: replace modules
-        target_modules_list = get_target_modules_list(model, lora_module)
-        create_and_replace_modules(model, target_modules_list, assign_pica_layer_with_shared_m)
-
-        # Step 4: Add shared_matrices to model parameters (important!)
-        for group, m in shared_matrices.items():
-            group_name = group.replace(".", "_")  # <-- FIX: no dots in names
-            model.register_parameter(f"shared_m_{group_name}", m)
+    elif pica_args.adapter_name == 'pica':
+        model = get_pica_model(model, pica_args.target_modules, pica_args.rank)
 
 
     print(f"Trainable Parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
@@ -425,18 +375,16 @@ def train():
     model.generation_config.top_p = 1.0
 
     if pica_args.adapter_name == 'pica':
-        model.eval()
-        torch.cuda.empty_cache()
-        replace_pica_with_fused_linear(model, get_target_modules_list(model, pica_args.target_modules))
-
+        # Save only adapter weights (shared_m + config). Base model is NOT duplicated.
+        # At inference, use load_pica_model(base_model, adapter_dir).merge_and_unload()
+        model.save_adapter(training_args.output_dir)
+        tokenizer.save_pretrained(training_args.output_dir)
     else:
         model = model.merge_and_unload()
-
-    for param in model.parameters():
-        param.data = param.data.contiguous()
-   
-    model.save_pretrained(training_args.output_dir, safe_serialization=False)
-    tokenizer.save_pretrained(training_args.output_dir)
+        for param in model.parameters():
+            param.data = param.data.contiguous()
+        model.save_pretrained(training_args.output_dir, safe_serialization=False)
+        tokenizer.save_pretrained(training_args.output_dir)
 
 
 if __name__ == "__main__":

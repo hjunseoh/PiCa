@@ -30,5 +30,3 @@ CUDA_VISIBLE_DEVICES=0 python3 -m torch.distributed.launch --master_addr ${MASTE
     --target_modules q_proj k_proj v_proj up_proj down_proj \
     --adapter_name "pica" \
     --rank 256
-
-
