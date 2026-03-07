@@ -7,59 +7,83 @@
   <img src="https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?style=flat-square&logo=pytorch" />
 </p>
 
+<p align="center">
+Parameter-efficient fine-tuning via <b>column space gradient projection</b> and <b>shared adapters</b>.
+</p>
+
 **Official implementation of [PiCa: Parameter-Efficient Fine-Tuning with Column Space Projection](https://arxiv.org/abs/2505.20211) (ICLR 2026).**
 
-## Overview
+---
 
-**PiCa (Parameter-Efficient Fine-tuning with Column Space Projection)** is a novel, theoretically grounded PEFT method that leverages the intrinsic geometry of pre-trained weights for effective and extremely parameter-efficient adaptation.
+# Overview
 
-Our theoretical analysis demonstrates that projecting gradients onto the **principal column space** spanned by pre-trained weights leads to effective adaptation. This gradient projection is paired with a novel **weight-sharing mechanism** for further parameter efficiency.
+**PiCa (Parameter-Efficient Fine-tuning with Column Space Projection)** is a theoretically grounded PEFT method that leverages the intrinsic geometry of pre-trained weights for effective and extremely parameter-efficient adaptation.
 
-As a result, **PiCa achieves significantly better performance than LoRA, DoRA, and other PEFT baselines — even with fewer trainable parameters than rank-1 configurations.**
+Our analysis shows that projecting gradients onto the **principal column space** spanned by pre-trained weights leads to efficient adaptation. This projection is paired with a **weight-sharing mechanism** that further reduces the number of trainable parameters.
 
-<br>
+As a result, **PiCa significantly outperforms LoRA, DoRA, and other PEFT baselines — even with fewer trainable parameters than rank-1 configurations.**
 
-<div align="center">
+<p align="center">
+  <img src="assets/parameter efficiency.jpg" width="70%" alt="Parameter Efficiency Comparison"/>
+</p>
 
-<img src="assets/parameter efficiency.jpg" width="70%" alt="Parameter Efficiency Comparison"/>
+<p align="center">
+<b>Figure 1.</b> PiCa achieves higher accuracy with fewer trainable parameters than existing PEFT methods.
+</p>
 
-**Figure 1. Parameter efficiency comparison.**  
-PiCa achieves higher accuracy while using fewer trainable parameters than existing PEFT methods.
+**Key properties of PiCa**
 
-</div>
-## Method
+- Gradient projection onto the **principal column space**
+- **Shared trainable matrices** across layers
+- **Higher accuracy with fewer parameters** than LoRA-style adapters
+
+---
+
+# Results
+
+<p align="center">
+  <img src="assets/math_reasoning.jpg" width="70%" alt="Mathematical Reasoning Results"/>
+</p>
+
+<p align="center">
+<b>Figure 2.</b> PiCa outperforms competing PEFT methods on mathematical reasoning benchmarks (GSM8K, MATH).
+</p>
+
+---
+
+# Method
 
 Given a frozen pre-trained weight matrix **W₀** ∈ ℝ<sup>d_in×d_out</sup> and an input **X**, PiCa computes:
 
 > **Y = X (W₀ + U<sub>r</sub> M)**
 
 where:
-- **U<sub>r</sub>** ∈ ℝ<sup>d_in×r</sup> — the top-*r* left singular vectors of **W₀** (frozen; computed once via SVD)
-- **M** ∈ ℝ<sup>r×d_out</sup> — the **only trainable parameter** (shared across all layers of the same type)
 
-This design means the effective number of trainable parameters is `r × d_out` per module *group* (not per layer), making PiCa significantly more parameter-efficient than LoRA.
+- **U<sub>r</sub>** ∈ ℝ<sup>d_in×r</sup> — top-*r* left singular vectors of **W₀** (frozen; computed via SVD)
+- **M** ∈ ℝ<sup>r×d_out</sup> — the **only trainable parameter**, shared across layers of the same type
 
-**Key advantages over LoRA (assuming L layers):**
+This design means the effective number of trainable parameters is `r × d_out` per module group (not per layer), making PiCa significantly more parameter-efficient than LoRA.
+
+### Comparison with LoRA
+
 | Feature | LoRA | PiCa |
 |---|---|---|
-| Trainable params | L × (d_in × r + r × d_out) | L × (r × d_out)  |
+| Trainable params | L × (d_in × r + r × d_out) | L × (r × d_out) (shared M) |
 | Grounded projection | ❌ random init | ✅ principal column space |
 | Weight sharing | ❌ | ✅ across same-type layers |
 | Memory footprint per layer | d_in × r + r × d_out | r × d_out only |
 
 ---
 
-## Installation
+# Installation
 
 ```bash
 git clone https://github.com/hjunseoh/PiCa.git
 cd PiCa
 
-# Create and activate conda environment
 conda create -n pica python=3.10 -y
 conda activate pica
 
-# Install package in editable mode
 pip install -e .
 ```
 
