@@ -17,12 +17,18 @@ Our theoretical analysis demonstrates that projecting gradients onto the **princ
 
 <p align="center">
   <img src="assets/parameter efficiency.jpg" width="48%" alt="Parameter Efficiency Comparison" />
-  &nbsp;&nbsp;
+</p>
+
+<p align="center">
+  <em>PiCa achieves higher accuracy with fewer parameters than all baselines.</em>
+</p>
+
+<p align="center">
   <img src="assets/math_reasoning.jpg" width="48%" alt="Mathematical Reasoning Results" />
 </p>
 
 <p align="center">
-  <em>Left: PiCa achieves higher accuracy with fewer parameters than all baselines. Right: PiCa outperforms competing methods on mathematical reasoning benchmarks (GSM-8K, MATH).</em>
+  <em>Right: PiCa outperforms competing methods on mathematical reasoning benchmarks (GSM-8K, MATH).</em>
 </p>
 
 ## Method
