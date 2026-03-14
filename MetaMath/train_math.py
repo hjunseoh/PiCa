@@ -288,7 +288,9 @@ def train():
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
-    ).to("cuda")
+        torch_dtype=torch.bfloat16,
+        device_map={"" : int(os.environ.get("LOCAL_RANK") or 0)},
+    )
     
         # Apply gradient tracking fix for input embeddings
     
@@ -345,7 +347,7 @@ def train():
                 lora_alpha=2*pica_args.rank,
                 use_dora=training_args.use_dora,
                 init_lora_weights=True,
-                target_modules=svft_args.target_modules,
+                target_modules=pica_args.target_modules,
                 lora_dropout=0,
                 bias="none",
                 task_type="CAUSAL_LM",

@@ -1,17 +1,13 @@
 import os
 import sys
-from typing import List
+from typing import List, Optional, Union
+from functools import partial, reduce
 
 import fire
 import torch
-import argparse
 import transformers
 from datasets import load_dataset
-from typing import List, Optional, Union
-
 from tqdm import tqdm
-import sys
-from functools import partial, reduce
 from pica import get_pica_model
 
 sys.path.append(os.path.join(os.getcwd(), "peft/src/"))
@@ -23,7 +19,7 @@ from peft import (  # noqa: E402
     get_peft_model_state_dict,
     set_peft_model_state_dict,
 )
-from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaTokenizer, AutoModel  # noqa: F402
+from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: F402
 
     
 def train(
@@ -116,11 +112,11 @@ def train(
     )
     # Only overwrite environ if wandb param passed
     if len(wandb_project) > 0:
-        os.environ["WANDB_PROJECT"] = "CommonsenseReasoning"
+        os.environ["WANDB_PROJECT"] = wandb_project
     if len(wandb_watch) > 0:
         os.environ["WANDB_WATCH"] = "all"
     if len(wandb_log_model) > 0:
-        os.environ["WANDB_LOG_MODEL"] = False
+        os.environ["WANDB_LOG_MODEL"] = "false"
 
     if load_8bit:
         model = AutoModelForCausalLM.from_pretrained(
@@ -134,7 +130,7 @@ def train(
         model = AutoModelForCausalLM.from_pretrained(
             base_model,
             load_in_8bit=False,
-            torch_dtype=torch.float32,
+            torch_dtype=torch.bfloat16,
             device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
             trust_remote_code=True,
             #revision="step143000",
@@ -272,8 +268,20 @@ def train(
         val_data = (
             train_val["test"].shuffle().map(generate_and_tokenize_prompt)
         )
+        # Drop all raw string columns that generate_and_tokenize_prompt doesn't convert.
+        # With remove_unused_columns=False, ALL columns go to the data collator
+        # which cannot convert strings to tensors.
+        tensor_cols = ["input_ids", "attention_mask", "labels"]
+        drop_cols = [c for c in train_data.column_names if c not in tensor_cols]
+        if drop_cols:
+            train_data = train_data.remove_columns(drop_cols)
+            val_data   = val_data.remove_columns(drop_cols)
     else:
         train_data = data["train"].shuffle().map(generate_and_tokenize_prompt)
+        tensor_cols = ["input_ids", "attention_mask", "labels"]
+        drop_cols = [c for c in train_data.column_names if c not in tensor_cols]
+        if drop_cols:
+            train_data = train_data.remove_columns(drop_cols)
         val_data = None
 
     if not ddp and torch.cuda.device_count() > 1:
@@ -300,7 +308,7 @@ def train(
             bf16=True,
             logging_steps=10,
             optim="adamw_torch",
-            evaluation_strategy="steps" if val_set_size > 0 else "no",
+            eval_strategy="steps" if val_set_size > 0 else "no",
             save_strategy="steps",
             eval_steps=eval_step if val_set_size > 0 else None,
             save_steps=save_step,
@@ -311,6 +319,7 @@ def train(
             group_by_length=group_by_length,
             report_to="wandb" if use_wandb else None,
             run_name=wandb_run_name if use_wandb else None,
+            remove_unused_columns=False,
             #deepspeed="deepspeed.json"
         ),
         data_collator=transformers.DataCollatorForSeq2Seq(
@@ -319,7 +328,7 @@ def train(
     )
     model.config.use_cache = False
 
-    if adapter_name not in ['boft', 'pica']:
+    if adapter_name not in ['boft']:
         model = model.bfloat16()
 
     trainer.train()

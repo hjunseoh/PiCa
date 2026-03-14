@@ -59,9 +59,14 @@ class LinearWithPiCa(nn.Module):
     # ── Forward ──────────────────────────────────────────────────────────────
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Effective weight:  W + M @ P
-        weight = self.base_layer.weight + self.shared_m @ self.p
-        out = x @ weight.T
+        # Avoid materializing the full [out_dim, in_dim] effective weight matrix.
+        # Instead split into two matmuls whose intermediate is only [B, seq, rank].
+        #   W_eff = W + M @ P
+        #   y = x @ W_eff.T  ≡  x @ W.T  +  (x @ P.T) @ M.T
+        # Ensure p is on same device/dtype as shared_m (multi-GPU guard)
+        p = self.p.to(device=self.shared_m.device, dtype=self.shared_m.dtype)
+        out = x @ self.base_layer.weight.T               # base output
+        out = out + (x @ p.T) @ self.shared_m.T          # adapter: [B,S,rank]→[B,S,out]
         if self.base_layer.bias is not None:
             out = out + self.base_layer.bias
         return out

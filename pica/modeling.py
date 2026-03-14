@@ -71,7 +71,7 @@ class PiCaModel(nn.Module):
 
     def __init__(self, model: nn.Module, config: PiCaConfig):
         super().__init__()
-        self.config = config
+        self.pica_config = config
         self.model = model
 
         # Freeze base model
@@ -81,14 +81,14 @@ class PiCaModel(nn.Module):
         # Build shared_m dict: one per keyword group (e.g. "q_proj")
         self._shared_ms: dict = {}
 
-        for kw in config.target_modules:
+        for kw in self.pica_config.target_modules:
             # Find the first matching Linear to determine out_features
             for _, _, full_path in _iter_linear_paths(self.model, [kw]):
                 mod: nn.Linear = self.model.get_submodule(full_path)
                 out_dim = mod.out_features
                 dtype = mod.weight.dtype
                 self._shared_ms[kw] = nn.Parameter(
-                    torch.zeros(out_dim, config.rank, dtype=dtype), requires_grad=True
+                    torch.zeros(out_dim, self.pica_config.rank, dtype=dtype), requires_grad=True
                 )
                 break  # only need the first matching layer to determine shape
 
@@ -100,7 +100,7 @@ class PiCaModel(nn.Module):
         # inject LinearWithPiCa into the base model (in-place)
         print("Applying PiCa adapters…")
         for parent, child_name, full_path in tqdm(
-            list(_iter_linear_paths(self.model, config.target_modules))
+            list(_iter_linear_paths(self.model, self.pica_config.target_modules))
         ):
             base_linear: nn.Linear = getattr(parent, child_name)
             # find which keyword group this belongs to
@@ -109,14 +109,19 @@ class PiCaModel(nn.Module):
                 if kw in full_path:
                     shared_m = m
                     break
-            adapted = LinearWithPiCa(base_linear, rank=config.rank, shared_m=shared_m)
+            adapted = LinearWithPiCa(base_linear, rank=self.pica_config.rank, shared_m=shared_m)
             setattr(parent, child_name, adapted)
 
         trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
         total = sum(p.numel() for p in self.parameters())
         print(f"Trainable parameters: {trainable:,} / {total:,} ({100*trainable/total:.4f}%)")
 
-    # ── Forward passthrough ───────────────────────────────────────────────────
+    # ── Forward / Mapping ───────────────────────────────────────────────────
+
+    @property
+    def config(self):
+        """Delegate any config access to the underlying base model."""
+        return self.model.config
 
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
@@ -137,7 +142,7 @@ class PiCaModel(nn.Module):
             for kw, m in self._shared_ms.items()
         }
         torch.save(adapter_state, os.path.join(output_dir, "pica_adapter.bin"))
-        self.config.save(output_dir)
+        self.pica_config.save(output_dir)
         print(f"PiCa adapter saved to '{output_dir}'")
 
     # ── Merge & unload ────────────────────────────────────────────────────────
@@ -236,6 +241,13 @@ def load_pica_model(model: nn.Module, adapter_dir: str) -> PiCaModel:
     for kw, tensor in adapter_state.items():
         if kw not in pica_model._shared_ms:
             raise KeyError(f"Adapter key '{kw}' not found in reconstructed PiCaModel.")
+        expected = pica_model._shared_ms[kw].shape
+        if tensor.shape != expected:
+            raise ValueError(
+                f"Shape mismatch for adapter key '{kw}': "
+                f"saved {tuple(tensor.shape)} vs expected {tuple(expected)}. "
+                f"Ensure you are loading with the same base model used during training."
+            )
         pica_model._shared_ms[kw].data.copy_(tensor)
 
     print(f"PiCa adapter loaded from '{adapter_dir}'")

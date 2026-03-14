@@ -11,6 +11,10 @@ class PiCaConfig:
     rank: int = 256
     base_model_name_or_path: Optional[str] = None
 
+    def to_dict(self):
+        """Return config as a dictionary."""
+        return asdict(self)
+
     def save(self, output_dir: str):
         """Save config to output_dir/pica_config.json."""
         os.makedirs(output_dir, exist_ok=True)
